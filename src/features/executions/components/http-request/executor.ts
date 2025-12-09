@@ -22,11 +22,22 @@ Handlebars.registerHelper('get', function(obj: any, path: string) {
     return result != null ? result : '';
 });
 
+// Helper function to clean spaces inside Handlebars variables
+// Converts {{variable. path. property}} to {{variable.path.property}}
+function cleanHandlebarsTemplate(template: string): string {
+    return template.replace(/\{\{([^}]+)\}\}/g, (match, content) => {
+        // Remove spaces around dots and clean up the variable path
+        const cleaned = content.trim().replace(/\s*\.\s*/g, '.').replace(/\s+/g, '');
+        return `{{${cleaned}}}`;
+    });
+}
+
 type HttpRequestData = {
     variableName?: string;
     endpoint?: string;
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: string;
+    headers?: string;
 };
 
 export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
@@ -87,7 +98,8 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
             // Compile endpoint with Handlebars, handling potential errors
             let endpoint: string;
             try {
-                const template = Handlebars.compile(data.endpoint);
+                const cleanedEndpoint = cleanHandlebarsTemplate(data.endpoint);
+                const template = Handlebars.compile(cleanedEndpoint);
                 endpoint = template(context);
             } catch (error) {
                 await publish(
@@ -112,12 +124,38 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
             
             const method = data.method;
 
+            let customHeaders: Record<string, string> | undefined;
+            if (data.headers) {
+                try {
+                    const cleanedHeaders = cleanHandlebarsTemplate(data.headers);
+                    const headersTemplate = Handlebars.compile(cleanedHeaders);
+                    const renderedHeaders = headersTemplate(context);
+                    const parsed = JSON.parse(renderedHeaders);
+                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                        throw new Error('Headers JSON debe ser un objeto con pares clave/valor');
+                    }
+                    customHeaders = Object.entries(parsed).reduce<Record<string, string>>((acc, [key, value]) => {
+                        acc[String(key)] = String(value);
+                        return acc;
+                    }, {});
+                } catch (error) {
+                    await publish(
+                        httpRequestChannel().status({
+                            nodeId,
+                            status: 'error',
+                        }),
+                    );
+                    throw new NonRetriableError(`HTTP Request node: Headers inválidos: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+
             const options: KyOptions = { method };
 
             if (['POST', 'PUT', 'PATCH'].includes(method)) {
                 let resolved: string;
                 try {
-                    const bodyTemplate = Handlebars.compile(data.body || '{}');
+                    const cleanedBody = cleanHandlebarsTemplate(data.body || '{}');
+                    const bodyTemplate = Handlebars.compile(cleanedBody);
                     resolved = bodyTemplate(context);
                 } catch (error) {
                     await publish(
@@ -146,8 +184,11 @@ export const httpRequestExecutor: NodeExecutor<HttpRequestData> = async ({
                 
                 options.body = resolved;
                 options.headers = {
-                    'Content-Type': 'application/json',
+                    ...(customHeaders || {}),
+                    'Content-Type': customHeaders?.['Content-Type'] || 'application/json',
                 };
+            } else if (customHeaders) {
+                options.headers = customHeaders;
             }
 
             const response = await ky(endpoint, options);

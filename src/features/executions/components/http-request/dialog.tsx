@@ -42,6 +42,18 @@ const formSchema = z.object({
     }),
     endpoint: z.string().min(1, { message: 'Please enter a valid URL' }),
     method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+    headers: z
+        .string()
+        .optional()
+        .refine((value) => {
+            if (!value) return true;
+            try {
+                const parsed = JSON.parse(value);
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+            } catch {
+                return false;
+            }
+        }, { message: 'Headers debe ser un JSON con pares clave/valor' }),
     body: z
         .string()
         .optional()
@@ -71,6 +83,7 @@ export const HttpRequestDialog = ({
             variableName: defaultValues.variableName || '',
             endpoint: defaultValues.endpoint || '',
             method: defaultValues.method || 'GET',
+            headers: defaultValues.headers || '',
             body: defaultValues.body || '',
         },
     });
@@ -82,6 +95,7 @@ export const HttpRequestDialog = ({
                 variableName: defaultValues.variableName || '',
                 endpoint: defaultValues.endpoint || '',
                 method: defaultValues.method || 'GET',
+                headers: defaultValues.headers || '',
                 body: defaultValues.body || '',
             })
         }
@@ -99,15 +113,17 @@ export const HttpRequestDialog = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
+            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-4 sm:p-6">
+                <DialogHeader className="flex-shrink-0">
                     <DialogTitle>HTTP Request</DialogTitle>
                     <DialogDescription>
                         Configure settings for the HTTP Request node.
                     </DialogDescription>
                 </DialogHeader>
+                <div className="flex-1 overflow-y-auto pr-1">
                 <Form {...form}>
                     <form
+                        id='http-request-form'
                         onSubmit={form.handleSubmit(handleSubmit)}
                         className='space-y-8 mt-4'
                     >
@@ -163,6 +179,29 @@ export const HttpRequestDialog = ({
                         />
                         <FormField
                             control={form.control}
+                            name='headers'
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Headers (JSON)</FormLabel>
+                                    <FormControl>
+                                        <Textarea
+                                            className='min-h-[100px] font-mono text-sm'
+                                            placeholder={`{
+    "api_access_token": "TOKEN",
+    "Authorization": "Bearer {{secreto.chatwootToken}}"
+}`}
+                                            {...field}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>
+                                        Objeto JSON de headers. Se aceptan variables: {"{{variables}}"} o {"{{json variable}}"}.
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
                             name='endpoint'
                             render={({ field }) => (
                                 <FormItem>
@@ -207,11 +246,13 @@ export const HttpRequestDialog = ({
                                 )}
                             />
                         )}
-                        <DialogFooter className='mt-4'>
-                            <Button type='submit'>Save</Button>
-                        </DialogFooter>
+                        
                     </form>
                 </Form>
+                </div>
+                <DialogFooter className='mt-4 flex-shrink-0'>
+                    <Button type='submit' form='http-request-form'>Save</Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

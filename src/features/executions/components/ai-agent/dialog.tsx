@@ -30,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useCredentialsByType } from "@/features/credentials/hooks/use-credentials";
 import { CredentialType } from "@/generated/prisma";
 import Image from "next/image";
@@ -43,9 +43,7 @@ const formSchema = z.object({
       message:
         "Variable name must start with a letter or underscore and contain only letters, numbers and underscores.",
     }),
-  modelType: z.enum(["OPENAI", "ANTHROPIC", "GEMINI"], {
-    required_error: "Model type is required",
-  }),
+  modelType: z.enum(["OPENAI", "ANTHROPIC", "GEMINI"]),
   credentialId: z.string().min(1, "Credential is required"),
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1, "User prompt is required"),
@@ -68,27 +66,12 @@ export const AiAgentDialog = ({
   defaultValues = {},
   connectedToolsCount = 0,
 }: Props) => {
-  const modelType = defaultValues.modelType || "OPENAI";
-  
-  const { data: openaiCredentials } = useCredentialsByType(CredentialType.OPENAI);
-  const { data: anthropicCredentials } = useCredentialsByType(CredentialType.ANTHROPIC);
-  const { data: geminiCredentials } = useCredentialsByType(CredentialType.GEMINI);
-
-  const getCredentials = () => {
-    switch (modelType) {
-      case "OPENAI":
-        return openaiCredentials || [];
-      case "ANTHROPIC":
-        return anthropicCredentials || [];
-      case "GEMINI":
-        return geminiCredentials || [];
-      default:
-        return [];
-    }
-  };
-
-  const credentials = getCredentials();
-  const isLoadingCredentials = !openaiCredentials && !anthropicCredentials && !geminiCredentials;
+  const { data: openaiCredentials, isLoading: isLoadingOpenAI } =
+    useCredentialsByType(CredentialType.OPENAI);
+  const { data: anthropicCredentials, isLoading: isLoadingAnthropic } =
+    useCredentialsByType(CredentialType.ANTHROPIC);
+  const { data: geminiCredentials, isLoading: isLoadingGemini } =
+    useCredentialsByType(CredentialType.GEMINI);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -101,14 +84,36 @@ export const AiAgentDialog = ({
     },
   });
 
-  const watchedModelType = form.watch("modelType");
+  const watchedModelType = form.watch("modelType") || "OPENAI";
 
-  // Reset credentials when model type changes
+  const getCredentials = () => {
+    switch (watchedModelType) {
+      case "OPENAI":
+        return openaiCredentials || [];
+      case "ANTHROPIC":
+        return anthropicCredentials || [];
+      case "GEMINI":
+        return geminiCredentials || [];
+      default:
+        return [];
+    }
+  };
+
+  const credentials = getCredentials();
+  const isLoadingCredentials =
+    (watchedModelType === "OPENAI" && isLoadingOpenAI) ||
+    (watchedModelType === "ANTHROPIC" && isLoadingAnthropic) ||
+    (watchedModelType === "GEMINI" && isLoadingGemini);
+
+  const previousModelType = useRef<string | null>(null);
+
+  // Reset credentials only when the user cambia el modelo seleccionado
   useEffect(() => {
-    if (watchedModelType && watchedModelType !== modelType) {
+    if (previousModelType.current && previousModelType.current !== watchedModelType) {
       form.setValue("credentialId", "");
     }
-  }, [watchedModelType, form, modelType]);
+    previousModelType.current = watchedModelType;
+  }, [watchedModelType, form]);
 
   // Reset form values when dialog opens with new defaults
   useEffect(() => {
@@ -146,8 +151,8 @@ export const AiAgentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader className="pb-2">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-4 sm:p-6">
+        <DialogHeader className="pb-2 flex-shrink-0">
           <DialogTitle className="text-base">AI Agent Configuration</DialogTitle>
           <DialogDescription className="text-xs">
             Configure el agente de IA con selección de modelo y prompts. Conecta herramientas desde los handles especiales (amarillos) en el lado derecho del nodo.
@@ -158,11 +163,13 @@ export const AiAgentDialog = ({
             )}
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-3 mt-1"
-          >
+        <div className="flex-1 overflow-y-auto pr-1">
+          <Form {...form}>
+            <form
+              id="ai-agent-form"
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="space-y-3 mt-1"
+            >
             <FormField
               control={form.control}
               name="variableName"
@@ -244,8 +251,10 @@ export const AiAgentDialog = ({
                     {form.watch("modelType") === "GEMINI" && "Gemini"} Credential
                   </FormLabel>
                   <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                    }}
                     disabled={isLoadingCredentials || !credentials?.length}
                   >
                     <FormControl>
@@ -344,11 +353,12 @@ export const AiAgentDialog = ({
                 </div>
               </div>
             </div>
-            <DialogFooter className="mt-1 pt-2">
-              <Button type="submit" size="sm">Save</Button>
-            </DialogFooter>
-          </form>
-        </Form>
+            </form>
+          </Form>
+        </div>
+        <DialogFooter className="mt-4 pt-2 flex-shrink-0">
+          <Button type="submit" form="ai-agent-form" size="sm">Save</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

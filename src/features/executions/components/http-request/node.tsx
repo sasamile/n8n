@@ -14,6 +14,7 @@ type HttpRequestNodeData = {
     method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
     body?: string;
     variableName?: string;
+    headers?: string;
 };
 
 type HttpRequestNodeType = Node<HttpRequestNodeData>;
