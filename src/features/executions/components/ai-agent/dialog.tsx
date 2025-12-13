@@ -164,12 +164,12 @@ export const AiAgentDialog = ({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto pr-1">
-          <Form {...form}>
-            <form
+        <Form {...form}>
+          <form
               id="ai-agent-form"
-              onSubmit={form.handleSubmit(handleSubmit)}
-              className="space-y-3 mt-1"
-            >
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-3 mt-1"
+          >
             <FormField
               control={form.control}
               name="variableName"
@@ -353,8 +353,8 @@ export const AiAgentDialog = ({
                 </div>
               </div>
             </div>
-            </form>
-          </Form>
+          </form>
+        </Form>
         </div>
         <DialogFooter className="mt-4 pt-2 flex-shrink-0">
           <Button type="submit" form="ai-agent-form" size="sm">Save</Button>

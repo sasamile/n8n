@@ -17,6 +17,9 @@ import {
     MousePointerIcon,
     Webhook,
     Database,
+    GitBranch,
+    ImageIcon,
+    Volume2,
 } from 'lucide-react';
 import { NodeType } from '@/generated/prisma';
 import { Separator } from './ui/separator';
@@ -118,6 +121,24 @@ const executionNodes: NodeTypeOption[] = [
         description: 'Execute SQL queries on PostgreSQL database',
         icon: '/logos/postgresql.svg',
     },
+    {
+        type: NodeType.SWITCH,
+        label: 'Switch',
+        description: 'Conditional routing based on boolean expression',
+        icon: GitBranch,
+    },
+    {
+        type: NodeType.IMAGE_TO_TEXT,
+        label: 'Image to Text',
+        description: 'Convert images to text using AI vision',
+        icon: ImageIcon,
+    },
+    {
+        type: NodeType.AUDIO_TO_TEXT,
+        label: 'Audio to Text',
+        description: 'Convert audio to text using AI transcription',
+        icon: Volume2,
+    },
 ];
 
 interface NodeSelectorProps {
@@ -187,12 +208,15 @@ export function NodeSelector({
                         <SheetDescription>A trigger is a step that starts your workflow</SheetDescription>
                     </SheetHeader>
                     <div>
-                        {triggerNodes.map((nodeType) => {
+                        {triggerNodes
+                            .filter((nodeType) => nodeType.type != null)
+                            .map((nodeType, index) => {
                             const Icon = nodeType.icon;
+                            const uniqueKey = nodeType.type ? `trigger-${nodeType.type}` : `trigger-${index}`;
 
                             return (
                                 <div
-                                  key={nodeType.type}
+                                  key={uniqueKey}
                                   className='w-full justify-start h-auto
                                   py-5 px-4 rounded-none cursor-pointer border-l-2
                                   border-transparent hover:border-l-primary'
@@ -201,12 +225,15 @@ export function NodeSelector({
                                     <div className='flex items-center gap-6 w-full overflow-hidden'>
                                         {typeof Icon === 'string' ? (
                                             <img 
+                                              key={`img-${uniqueKey}`}
                                               src={Icon}
                                               alt={nodeType.label}
                                               className='size-5 object-contain rounded-sm'
                                             />
+                                        ) : Icon ? (
+                                            <Icon key={`icon-${uniqueKey}`} className='size-5' />
                                         ) : (
-                                            <Icon className='size-5' />
+                                            <div key={`placeholder-${uniqueKey}`} className='size-5' />
                                         )}
                                         <div className='flex flex-col items-start text-left'>
                                             <span className='font-medium text-sm'>{nodeType.label}</span>
@@ -219,12 +246,15 @@ export function NodeSelector({
                     </div>
                     <Separator />
                     <div>
-                        {executionNodes.map((nodeType) => {
+                        {executionNodes
+                            .filter((nodeType) => nodeType.type != null)
+                            .map((nodeType, index) => {
                             const Icon = nodeType.icon;
+                            const uniqueKey = nodeType.type ? `execution-${nodeType.type}` : `execution-${index}`;
 
                             return (
                                 <div
-                                  key={nodeType.type}
+                                  key={uniqueKey}
                                   className='w-full justify-start h-auto
                                   py-5 px-4 rounded-none cursor-pointer border-l-2
                                   border-transparent hover:border-l-primary'
@@ -233,12 +263,15 @@ export function NodeSelector({
                                     <div className='flex items-center gap-6 w-full overflow-hidden'>
                                         {typeof Icon === 'string' ? (
                                             <img 
+                                              key={`img-${uniqueKey}`}
                                               src={Icon}
                                               alt={nodeType.label}
                                               className='size-5 object-contain rounded-sm'
                                             />
+                                        ) : Icon ? (
+                                            <Icon key={`icon-${uniqueKey}`} className='size-5' />
                                         ) : (
-                                            <Icon className='size-5' />
+                                            <div key={`placeholder-${uniqueKey}`} className='size-5' />
                                         )}
                                         <div className='flex flex-col items-start text-left'>
                                             <span className='font-medium text-sm'>{nodeType.label}</span>

@@ -14,6 +14,9 @@ import { redisExecutor } from "../components/redis/executor";
 import { postgresqlExecutor } from "../components/postgresql/executor";
 import { botRouterExecutor } from "../components/bot-router/executor";
 import { aiAgentExecutor } from "../components/ai-agent/executor";
+import { switchExecutor } from "../components/switch/executor";
+import { imageToTextExecutor } from "../components/image-to-text/executor";
+import { audioToTextExecutor } from "../components/audio-to-text/executor";
 
 export const executorRegistry: Record<NodeType, NodeExecutor> = {
     [NodeType.MANUAL_TRIGGER]: manualTriggerExecutor,
@@ -31,6 +34,9 @@ export const executorRegistry: Record<NodeType, NodeExecutor> = {
     [NodeType.POSTGRESQL]: postgresqlExecutor,   
     [NodeType.BOT_ROUTER]: botRouterExecutor,
     [NodeType.AI_AGENT]: aiAgentExecutor,
+    [NodeType.SWITCH]: switchExecutor,
+    [NodeType.IMAGE_TO_TEXT]: imageToTextExecutor,
+    [NodeType.AUDIO_TO_TEXT]: audioToTextExecutor,
 };
 
 export const getExecutor = (type: NodeType): NodeExecutor => {

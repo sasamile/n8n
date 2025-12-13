@@ -17,6 +17,7 @@
     "@ai-sdk/google": "^2.0.23",
     "@ai-sdk/openai": "^2.0.52",
     "@anthropic-ai/sdk": "^0.71.2",
+    "@distube/ytdl-core": "^4.16.12",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.2.2",
     "@inngest/realtime": "^0.4.4",

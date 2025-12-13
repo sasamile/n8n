@@ -8,7 +8,7 @@ export const AuthLayout = ({children}: { children: React.ReactNode }) => {
                 <Link href={'/'} className="flex items-center gap-2 self-center font-medium">
                     <Image 
                         src={'logo.svg'}
-                        alt='Nodebase'
+                        alt='Zyntek.SAS - AI Agentic Workflow Engine'
                         width={30}
                         height={30}
                     />

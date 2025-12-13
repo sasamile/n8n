@@ -163,6 +163,9 @@ enum NodeType {
   POSTGRESQL
   BOT_ROUTER
   AI_AGENT
+  SWITCH
+  IMAGE_TO_TEXT
+  AUDIO_TO_TEXT
 }
 
 enum ExecutionStatus {

@@ -145,23 +145,58 @@ export const workflowsRouter = createTRPCRouter({
                     case 'AI_AGENT':
                         nodeType = NodeType.AI_AGENT;
                         break;
+                    case 'SWITCH':
+                        nodeType = NodeType.SWITCH;
+                        break;
+                    case 'IMAGE_TO_TEXT':
+                        nodeType = NodeType.IMAGE_TO_TEXT;
+                        break;
+                    case 'AUDIO_TO_TEXT':
+                        nodeType = NodeType.AUDIO_TO_TEXT;
+                        break;
                     default:
-                        throw new Error(`Invalid node type: ${typeStr}`);
+                        // Try to use the string directly as enum value (fallback)
+                        if (Object.values(NodeType).includes(typeStr as NodeType)) {
+                            nodeType = typeStr as NodeType;
+                        } else {
+                            throw new Error(`Invalid node type: ${typeStr}. Available types: ${Object.values(NodeType).join(', ')}`);
+                        }
+                }
+                
+                // Ensure we're using the enum value, not a string
+                const finalType = nodeType as NodeType;
+                
+                // Validate the type is actually in the enum
+                if (!Object.values(NodeType).includes(finalType)) {
+                    throw new Error(`Invalid node type after mapping: ${finalType}. Available: ${Object.values(NodeType).join(', ')}`);
                 }
                 
                 return {
                     id: node.id,
                     workflowId: id,
                     name: typeStr,
-                    type: nodeType,
+                    type: finalType,
                     position: node.position,
                     data: node.data || {},
                 };
             });
             
             // Use createMany - Prisma should accept the enum values correctly
+            // Ensure all types are valid enum values
+            const validatedNodes = nodesToCreate.map(node => {
+                // Double-check the type is a valid enum value
+                const validType = Object.values(NodeType).includes(node.type as NodeType) 
+                    ? node.type 
+                    : (NodeType as any)[node.type as string] || node.type;
+                
+                return {
+                    ...node,
+                    type: validType,
+                };
+            });
+            
             await tx.node.createMany({
-                data: nodesToCreate,
+                data: validatedNodes,
             });
 
             // Validate that all edges reference existing nodes

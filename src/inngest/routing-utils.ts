@@ -127,3 +127,67 @@ export function filterNodesByBotRouting(
   console.log(`[Bot Router] =========================`);
 }
 
+/**
+ * Filter nodes to execute based on Switch condition result
+ * @param matchedCaseIndex - The index of the matched case, or -1 for default case
+ */
+export function filterNodesBySwitchRouting(
+  switchNodeId: string,
+  matchedCaseIndex: number,
+  sortedNodes: Node[],
+  connections: Connection[],
+  nodesToExecute: Set<string>
+): void {
+  console.log(`[Switch] ===== FILTERING NODES =====`);
+  console.log(`[Switch] Matched case index: ${matchedCaseIndex}`);
+  console.log(`[Switch] Switch node ID: ${switchNodeId}`);
+  
+  // Find connections from switch's matched output
+  // If matchedCaseIndex is -1, no case matched - don't execute any connected nodes
+  if (matchedCaseIndex < 0) {
+    console.log(`[Switch] No case matched (index: ${matchedCaseIndex}), removing all nodes after switch`);
+    const switchIndex = sortedNodes.findIndex(n => n.id === switchNodeId);
+    for (let i = switchIndex + 1; i < sortedNodes.length; i++) {
+      nodesToExecute.delete(sortedNodes[i].id);
+    }
+    console.log(`[Switch] =========================`);
+    return;
+  }
+  
+  const expectedOutput = `source-${matchedCaseIndex}`;
+  console.log(`[Switch] Looking for connections with fromOutput: "${expectedOutput}"`);
+  
+  const switchConnections = connections.filter(
+    conn => conn.fromNodeId === switchNodeId && conn.fromOutput === expectedOutput
+  );
+
+  console.log(`[Switch] Found ${switchConnections.length} connections for case ${matchedCaseIndex}`);
+  
+  // Get nodes directly connected to the selected output
+  const directlyConnectedNodeIds = new Set(switchConnections.map(conn => conn.toNodeId));
+  console.log(`[Switch] Directly connected node IDs:`, Array.from(directlyConnectedNodeIds));
+
+  // Remove unreachable nodes (keep nodes before switch)
+  const switchIndex = sortedNodes.findIndex(n => n.id === switchNodeId);
+  console.log(`[Switch] Switch index: ${switchIndex}`);
+  
+  for (let i = switchIndex + 1; i < sortedNodes.length; i++) {
+    const currentNode = sortedNodes[i];
+    const isReachable = isNodeReachableFromRouter(
+      currentNode.id,
+      directlyConnectedNodeIds,
+      connections
+    );
+    
+    console.log(`[Switch] Node ${currentNode.id} (${currentNode.type}) is reachable: ${isReachable}`);
+    
+    if (!isReachable) {
+      console.log(`[Switch] Removing node ${currentNode.id} from execution`);
+      nodesToExecute.delete(currentNode.id);
+    }
+  }
+  
+  console.log(`[Switch] Final nodes to execute:`, Array.from(nodesToExecute));
+  console.log(`[Switch] =========================`);
+}
+

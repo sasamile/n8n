@@ -9,6 +9,9 @@ import { RedisNode } from "@/features/executions/components/redis/node";
 import { PostgreSQLNode } from "@/features/executions/components/postgresql/node";
 import { BotRouterNode } from "@/features/executions/components/bot-router/node";
 import { AiAgentNode } from "@/features/executions/components/ai-agent/node";
+import { SwitchNode } from "@/features/executions/components/switch/node";
+import { ImageToTextNode } from "@/features/executions/components/image-to-text/node";
+import { AudioToTextNode } from "@/features/executions/components/audio-to-text/node";
 import { GoogleFormTrigger } from "@/features/triggers/components/google-form-trigger/node";
 import { ManualTriggerNode } from "@/features/triggers/components/manual-trigger/node";
 import { StripeTriggerNode } from "@/features/triggers/components/stripe-trigger/node";
@@ -32,6 +35,9 @@ export const nodeComponents = {
     [NodeType.REDIS]: RedisNode,
     [NodeType.POSTGRESQL]: PostgreSQLNode,
     [NodeType.AI_AGENT]: AiAgentNode,
+    [NodeType.SWITCH]: SwitchNode,
+    [NodeType.IMAGE_TO_TEXT]: ImageToTextNode,
+    [NodeType.AUDIO_TO_TEXT]: AudioToTextNode,
 } as const satisfies NodeTypes;
 
 export type RegisteredNodeType = keyof typeof nodeComponents; 

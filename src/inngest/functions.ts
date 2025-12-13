@@ -3,7 +3,7 @@ import { NonRetriableError } from "inngest";
 import { inngest } from "./client";
 import prisma from "@/lib/db";
 import { topologicalSort } from "./utils";
-import { filterNodesByBotRouting, getSelectedBotFromContext } from "./routing-utils";
+import { filterNodesByBotRouting, getSelectedBotFromContext, filterNodesBySwitchRouting } from "./routing-utils";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
 import { ExecutionStatus, NodeType } from "@/generated/prisma";
 import { httpRequestChannel } from "./channels/http-request";
@@ -19,6 +19,9 @@ import { slackChannel } from "./channels/slack";
 import { redisChannel } from "./channels/redis";
 import { postgresqlChannel } from "./channels/postgresql";
 import { botRouterChannel } from "./channels/bot-router";
+import { switchChannel } from "./channels/switch";
+import { imageToTextChannel } from "./channels/image-to-text";
+import { audioToTextChannel } from "./channels/audio-to-text";
 
 export const executeWorkflow = inngest.createFunction(
   { 
@@ -51,6 +54,9 @@ export const executeWorkflow = inngest.createFunction(
       redisChannel(),
       postgresqlChannel(),
       botRouterChannel(),
+      switchChannel(),
+      imageToTextChannel(),
+      audioToTextChannel(),
     ],
   },
   async ({ event, step, publish }) => {
@@ -148,6 +154,21 @@ export const executeWorkflow = inngest.createFunction(
           filterNodesByBotRouting(
             node.id,
             selectedBot,
+            sortedNodes,
+            workflow.connections,
+            nodesToExecute
+          );
+        }
+      }
+
+      // Handle Switch: filter nodes based on condition result
+      if (node.type === NodeType.SWITCH) {
+        const switchResult = context[node.data?.variableName as string] as { result?: number } | undefined;
+        if (switchResult?.result !== undefined) {
+          // result is now the matched case index (-1 for default case)
+          filterNodesBySwitchRouting(
+            node.id,
+            switchResult.result,
             sortedNodes,
             workflow.connections,
             nodesToExecute
