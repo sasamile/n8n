@@ -7,6 +7,13 @@ import prisma from '@/lib/db';
 import { decrypt } from '@/lib/encryption';
 import ky from 'ky';
 import ytdl from '@distube/ytdl-core';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { writeFileSync, unlinkSync, readFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+const execAsync = promisify(exec);
 
 Handlebars.registerHelper('json', (context) => {
     const jsonString = JSON.stringify(context, null, 2);
@@ -20,6 +27,117 @@ function cleanHandlebarsTemplate(template: string): string {
         const cleaned = content.trim().replace(/\s*\.\s*/g, '.').replace(/\s+/g, '');
         return `{{${cleaned}}}`;
     });
+}
+
+// Helper function to convert m4a to mp3 using FFmpeg
+async function convertM4aToMp3(buffer: Buffer, nodeId: string): Promise<Buffer | null> {
+    try {
+        // Check if FFmpeg is available
+        try {
+            await execAsync('ffmpeg -version');
+        } catch {
+            console.log(`[AudioToText ${nodeId}] FFmpeg not found. Please install FFmpeg manually: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)`);
+            return null;
+        }
+
+        // Create temporary files
+        const tempDir = tmpdir();
+        const inputPath = join(tempDir, `audio-input-${Date.now()}-${Math.random().toString(36).substring(7)}.m4a`);
+        const outputPath = join(tempDir, `audio-output-${Date.now()}-${Math.random().toString(36).substring(7)}.mp3`);
+
+        try {
+            // Write input file
+            writeFileSync(inputPath, buffer);
+
+            // Convert using FFmpeg
+            console.log(`[AudioToText ${nodeId}] Attempting to convert m4a to mp3 using FFmpeg...`);
+            await execAsync(`ffmpeg -i "${inputPath}" -acodec libmp3lame -q:a 2 "${outputPath}" -y`);
+
+            // Read converted file
+            const convertedBuffer = readFileSync(outputPath);
+            console.log(`[AudioToText ${nodeId}] Successfully converted m4a to mp3 (${(convertedBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
+
+            return convertedBuffer;
+        } finally {
+            // Clean up temporary files
+            try {
+                unlinkSync(inputPath);
+            } catch (e) {
+                console.warn(`[AudioToText ${nodeId}] Failed to delete temp input file:`, e);
+            }
+            try {
+                unlinkSync(outputPath);
+            } catch (e) {
+                console.warn(`[AudioToText ${nodeId}] Failed to delete temp output file:`, e);
+            }
+        }
+    } catch (error) {
+        console.error(`[AudioToText ${nodeId}] Failed to convert m4a to mp3:`, error);
+        return null;
+    }
+}
+
+// Helper function to detect audio file format from magic bytes
+function detectAudioFormat(buffer: Buffer | Uint8Array | ArrayBuffer): { extension: string; mimeType: string } {
+    let bytes: Buffer;
+    if (Buffer.isBuffer(buffer)) {
+        bytes = buffer;
+    } else if (buffer instanceof Uint8Array) {
+        bytes = Buffer.from(buffer);
+    } else {
+        bytes = Buffer.from(buffer);
+    }
+    const firstBytes = bytes.slice(0, 12);
+    
+    // MP3: ID3 tag (ID3) or MPEG frame sync (0xFF 0xFB/0xFA/0xF2/0xF3)
+    if (firstBytes.slice(0, 3).toString() === 'ID3') {
+        return { extension: 'mp3', mimeType: 'audio/mpeg' };
+    }
+    if (firstBytes[0] === 0xFF && (firstBytes[1] & 0xE0) === 0xE0) {
+        return { extension: 'mp3', mimeType: 'audio/mpeg' };
+    }
+    
+    // WAV: RIFF...WAVE
+    if (firstBytes.slice(0, 4).toString() === 'RIFF' && firstBytes.slice(8, 12).toString() === 'WAVE') {
+        return { extension: 'wav', mimeType: 'audio/wav' };
+    }
+    
+    // FLAC: fLaC
+    if (firstBytes.slice(0, 4).toString() === 'fLaC') {
+        return { extension: 'flac', mimeType: 'audio/flac' };
+    }
+    
+    // OGG: OggS
+    if (firstBytes.slice(0, 4).toString() === 'OggS') {
+        return { extension: 'ogg', mimeType: 'audio/ogg' };
+    }
+    
+    // WebM: starts with 0x1A 0x45 0xDF 0xA3
+    if (firstBytes[0] === 0x1A && firstBytes[1] === 0x45 && firstBytes[2] === 0xDF && firstBytes[3] === 0xA3) {
+        return { extension: 'webm', mimeType: 'audio/webm' };
+    }
+    
+    // M4A/MP4: ftyp box (ftyp at offset 4)
+    // Note: OpenAI Whisper requires audio/mp4 MIME type for both m4a and mp4 files
+    if (firstBytes.slice(4, 8).toString() === 'ftyp') {
+        // Check brand to distinguish between m4a and mp4
+        const brand = firstBytes.slice(8, 12).toString();
+        // Log the brand for debugging
+        console.log(`[AudioToText] Detected MP4 container, brand: ${brand}`);
+        
+        // Some m4a files might not work with OpenAI Whisper even with correct MIME type
+        // If brand indicates m4a, we'll still use audio/mp4 but log a warning
+        if (brand.includes('M4A') || brand.includes('mp41') || brand.includes('mp42') || brand.includes('isom')) {
+            // Use audio/mp4 for m4a files as OpenAI Whisper requires this MIME type
+            // Note: Some m4a files may still fail - user may need to convert to mp3
+            return { extension: 'm4a', mimeType: 'audio/mp4' };
+        }
+        return { extension: 'mp4', mimeType: 'audio/mp4' };
+    }
+    
+    // Default to mp3 if format cannot be detected
+    console.warn(`[AudioToText] Could not detect audio format from magic bytes, defaulting to mp3`);
+    return { extension: 'mp3', mimeType: 'audio/mpeg' };
 }
 
 type AudioToTextData = {
@@ -77,6 +195,9 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
         // Step 1: Compile and validate URL
         const audioUrl = await step.run('compile-url', async () => {
             try {
+                if (!data.audioUrl) {
+                    throw new NonRetriableError('Audio to Text node: Audio URL is required');
+                }
                 const cleanedUrl = cleanHandlebarsTemplate(data.audioUrl);
                 const template = Handlebars.compile(cleanedUrl);
                 let url = template(context);
@@ -265,26 +386,55 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
 
         // Step 4: Detect file type and prepare for OpenAI
         const audioFile = await step.run('prepare-audio', async () => {
-            // Detect file extension from URL
-            const urlPath = new URL(audioUrl).pathname;
-            const extension = urlPath.split('.').pop()?.toLowerCase() || 'mp3';
+            // Convert audioBuffer to Buffer if needed (Inngest may serialize it)
+            let bufferForDetection: Buffer;
+            if (Buffer.isBuffer(audioBuffer)) {
+                bufferForDetection = audioBuffer;
+            } else if (audioBuffer instanceof Uint8Array) {
+                bufferForDetection = Buffer.from(audioBuffer);
+            } else {
+                bufferForDetection = Buffer.from(audioBuffer as unknown as ArrayBuffer);
+            }
             
-            // Map extension to MIME type (OpenAI Whisper requires specific MIME types)
-            const mimeTypes: Record<string, string> = {
-                'mp3': 'audio/mpeg',
-                'mp4': 'audio/mp4',
-                'mpeg': 'audio/mpeg',
-                'mpga': 'audio/mpeg',
-                'm4a': 'audio/m4a', // OpenAI accepts m4a with this MIME type
-                'wav': 'audio/wav',
-                'webm': 'audio/webm',
-                'flac': 'audio/flac',
-                'oga': 'audio/ogg',
-                'ogg': 'audio/ogg',
-            };
+            // First, try to detect format from magic bytes (most reliable)
+            const detectedFormat = detectAudioFormat(bufferForDetection);
             
-            const mimeType = mimeTypes[extension] || 'audio/mpeg';
+            // Also check URL extension as fallback/validation
+            let urlExtension: string | undefined;
+            try {
+                const urlPath = new URL(audioUrl).pathname;
+                urlExtension = urlPath.split('.').pop()?.toLowerCase();
+            } catch {
+                // URL parsing failed, ignore
+            }
+            
+            // Use detected format, but log if URL extension differs
+            const extension = detectedFormat.extension;
+            const mimeType = detectedFormat.mimeType;
+            
+            if (urlExtension && urlExtension !== extension) {
+                console.log(`[AudioToText ${nodeId}] Format mismatch: URL extension is "${urlExtension}" but detected format is "${extension}" (using detected format)`);
+            }
+            
+            console.log(`[AudioToText ${nodeId}] Detected audio format: ${extension} (${mimeType})`);
+            
+            // Ensure filename has correct extension - OpenAI Whisper may check the extension
             const filename = `audio.${extension}`;
+            
+            // Log buffer info for debugging
+            let bufferSize: number;
+            if (Buffer.isBuffer(audioBuffer)) {
+                bufferSize = audioBuffer.length;
+            } else if (audioBuffer instanceof Uint8Array) {
+                bufferSize = audioBuffer.length;
+            } else if (audioBuffer && typeof audioBuffer === 'object' && 'byteLength' in audioBuffer) {
+                bufferSize = (audioBuffer as unknown as ArrayBuffer).byteLength;
+            } else {
+                // Fallback: use bufferForDetection size
+                bufferSize = bufferForDetection.length;
+            }
+            const sizeMB = isNaN(bufferSize) ? 'unknown' : (bufferSize / 1024 / 1024).toFixed(2);
+            console.log(`[AudioToText ${nodeId}] Audio buffer size: ${sizeMB}MB`);
             
             // In Node.js, OpenAI SDK accepts Buffer directly
             // Create a File-like object that OpenAI SDK can handle
@@ -299,13 +449,13 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
         const response = await step.run('openai-whisper', async () => {
             try {
                 // Ensure buffer is a Buffer or Uint8Array
-                let bufferForFile: Buffer | Uint8Array;
+                let bufferForFile: Uint8Array;
                 if (Buffer.isBuffer(audioFile.buffer)) {
-                    bufferForFile = audioFile.buffer;
+                    bufferForFile = new Uint8Array(audioFile.buffer);
                 } else if (audioFile.buffer instanceof Uint8Array) {
-                    bufferForFile = Buffer.from(audioFile.buffer);
+                    bufferForFile = audioFile.buffer;
                 } else {
-                    bufferForFile = Buffer.from(audioFile.buffer as ArrayBuffer);
+                    bufferForFile = new Uint8Array(audioFile.buffer as unknown as ArrayBuffer);
                 }
                 
                 const bufferSize = bufferForFile.length;
@@ -317,13 +467,13 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
                 
                 // Check if File constructor is available
                 if (typeof File !== 'undefined') {
-                    fileToUpload = new File([bufferForFile], audioFile.filename, { 
+                    fileToUpload = new File([bufferForFile as BlobPart], audioFile.filename, { 
                         type: audioFile.mimeType 
                     });
                 } else {
                     // Fallback: Create a File-like object using Blob
                     // OpenAI SDK should accept Blob in Node.js
-                    const blob = new Blob([bufferForFile], { type: audioFile.mimeType });
+                    const blob = new Blob([bufferForFile as BlobPart], { type: audioFile.mimeType });
                     // Add name property to make it File-like
                     Object.defineProperty(blob, 'name', { value: audioFile.filename });
                     fileToUpload = blob;
@@ -341,14 +491,86 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
                 return transcriptionResponse;
             } catch (error) {
                 console.error(`[AudioToText ${nodeId}] Error in transcription:`, error);
+                console.error(`[AudioToText ${nodeId}] File details: filename=${audioFile.filename}, mimeType=${audioFile.mimeType}, size=${audioFile.buffer instanceof Buffer ? audioFile.buffer.length : 'unknown'}`);
                 
                 if (error instanceof Error) {
                     // Check for specific OpenAI errors
                     if (error.message.includes('file_size_exceeded') || error.message.includes('too large')) {
                         throw new NonRetriableError('Audio to Text node: Audio file is too large. Maximum size is 25MB.');
                     }
-                    if (error.message.includes('invalid_file_format') || error.message.includes('unsupported')) {
-                        throw new NonRetriableError('Audio to Text node: Invalid audio file format. Supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm');
+                    if (error.message.includes('invalid_file_format') || error.message.includes('unsupported') || error.message.includes('400') || (error.message.includes('400') && error.message.includes('Invalid'))) {
+                        const detectedFormat = audioFile.filename.split('.').pop() || 'unknown';
+                        
+                        // Special handling for m4a files: try to convert to mp3 automatically
+                        if (detectedFormat === 'm4a') {
+                            console.log(`[AudioToText ${nodeId}] m4a file rejected by Whisper, attempting automatic conversion to mp3...`);
+                            
+                            // Get original buffer
+                            let originalBuffer: Buffer;
+                            if (Buffer.isBuffer(audioFile.buffer)) {
+                                originalBuffer = audioFile.buffer;
+                            } else if (audioFile.buffer instanceof Uint8Array) {
+                                originalBuffer = Buffer.from(audioFile.buffer);
+                            } else {
+                                originalBuffer = Buffer.from(audioFile.buffer as unknown as ArrayBuffer);
+                            }
+                            
+                            // Try to convert
+                            const convertedBuffer = await convertM4aToMp3(originalBuffer, nodeId);
+                            
+                            if (convertedBuffer) {
+                                console.log(`[AudioToText ${nodeId}] Retrying transcription with converted mp3 file...`);
+                                
+                                // Create new file with converted buffer
+                                let bufferForFile: Uint8Array = new Uint8Array(convertedBuffer);
+                                const convertedFilename = audioFile.filename.replace(/\.m4a$/i, '.mp3');
+                                
+                                let fileToUpload: any;
+                                if (typeof File !== 'undefined') {
+                                    fileToUpload = new File([bufferForFile as BlobPart], convertedFilename, { 
+                                        type: 'audio/mpeg' 
+                                    });
+                                } else {
+                                    const blob = new Blob([bufferForFile as BlobPart], { type: 'audio/mpeg' });
+                                    Object.defineProperty(blob, 'name', { value: convertedFilename });
+                                    fileToUpload = blob;
+                                }
+                                
+                                // Retry transcription with converted file
+                                try {
+                                    const transcriptionResponse = await openai.audio.transcriptions.create({
+                                        file: fileToUpload,
+                                        model: 'whisper-1',
+                                    }, {
+                                        timeout: 300000,
+                                    });
+                                    
+                                    console.log(`[AudioToText ${nodeId}] Transcription completed successfully after conversion`);
+                                    return transcriptionResponse;
+                                } catch (retryError) {
+                                    console.error(`[AudioToText ${nodeId}] Transcription failed even after conversion:`, retryError);
+                                    // Fall through to error message
+                                }
+                            }
+                            
+                            // If conversion failed or retry failed, show error message
+                            let errorMessage = `Audio to Text node: Invalid audio file format. Detected format: ${detectedFormat} (MIME type: ${audioFile.mimeType}).`;
+                            errorMessage += '\n\nSome m4a files may not be compatible with OpenAI Whisper even though m4a is listed as a supported format. This typically happens when the m4a file uses a codec (like ALAC) that Whisper doesn\'t support.';
+                            
+                            if (!convertedBuffer) {
+                                errorMessage += '\n\nAutomatic conversion to mp3 was attempted but failed (FFmpeg may not be installed or available).';
+                            } else {
+                                errorMessage += '\n\nAutomatic conversion to mp3 was successful, but the converted file was still rejected by Whisper.';
+                            }
+                            
+                            errorMessage += '\n\nSolution: Convert the audio file to mp3 or wav format before using it. You can use tools like FFmpeg or online converters.';
+                            
+                            throw new NonRetriableError(errorMessage);
+                        } else {
+                            let errorMessage = `Audio to Text node: Invalid audio file format. Detected format: ${detectedFormat} (MIME type: ${audioFile.mimeType}).`;
+                            errorMessage += `\n\nSupported formats: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm.\n\nIf your file is in a supported format but still fails, try converting it to mp3 or wav format.`;
+                            throw new NonRetriableError(errorMessage);
+                        }
                     }
                     if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
                         throw new NonRetriableError('Audio to Text node: Request timeout. The audio file may be too large or the transcription is taking too long.');
@@ -386,8 +608,17 @@ export const audioToTextExecutor: NodeExecutor<AudioToTextData> = async ({
                 status: 'error',
             }),
         );
+        // Si el error ya es un NonRetriableError, relanzarlo sin modificar
+        if (error instanceof NonRetriableError) {
+            throw error;
+        }
+        // Si el mensaje ya comienza con "Audio to Text node: ", no duplicar
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.startsWith('Audio to Text node: ')) {
+            throw new NonRetriableError(errorMessage);
+        }
         throw new NonRetriableError(
-            `Audio to Text node: ${error instanceof Error ? error.message : String(error)}`
+            `Audio to Text node: ${errorMessage}`
         );
     }
 };

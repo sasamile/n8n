@@ -249,9 +249,15 @@ export const switchExecutor: NodeExecutor<SwitchData> = async ({
 
             console.log(`[Switch ${nodeId}] Final result: case index ${matchedCaseIndex}`);
 
+            if (!data.variableName) {
+                throw new NonRetriableError('Switch node: Variable name is missing');
+            }
+
+            const variableName: string = data.variableName;
+
             return {
                 ...context,
-                [data.variableName]: responsePayload,
+                [variableName]: responsePayload,
             };
         });
 

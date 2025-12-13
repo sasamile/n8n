@@ -48,7 +48,9 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: SwitchFormValues) => void;
-  defaultValues?: Partial<SwitchFormValues>;
+  defaultValues?: Partial<SwitchFormValues> & {
+    condition?: string; // Legacy support for old format
+  };
 }
 
 export const SwitchDialog = ({

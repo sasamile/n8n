@@ -78,7 +78,7 @@ export const CredentialForm = ({
     const router = useRouter();
     const createCredential = useCreateCredential();
     const updateCredential = useUpdateCredential();
-    const { handleError, modal } = useUpgradeModal();
+    const { handleError } = useUpgradeModal();
 
     const isEdit = !!initialData?.id;
 
@@ -112,7 +112,6 @@ export const CredentialForm = ({
 
     return (
         <>
-            {modal}
             <Card className="shadow-none">
                 <CardHeader>
                     <CardTitle>

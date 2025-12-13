@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useSuspenseWorkflow, useUpdateWorkflow, useUpdateWorkflowName } from "@/features/workflows/hooks/use-workflows";
 import { editorAtom } from "../store/atoms";
 import { useAtomValue } from "jotai";
+import { NodeType } from "@/generated/prisma";
 
 export const EditorNameInput = ({ workflowId }: { workflowId: string }) => {
     const {data: workflow } = useSuspenseWorkflow(workflowId);
@@ -110,8 +111,22 @@ export const EditorSaveButton = ({ workflowId }: { workflowId: string }) => {
     const handleSave = () => {
         if (!editor) return;
 
-        const nodes = editor.getNodes();
-        const edges = editor.getEdges();
+        const nodes = editor.getNodes()
+            .filter((node): node is typeof node & { type: NodeType } => {
+                return node.type !== undefined && Object.values(NodeType).includes(node.type as NodeType);
+            })
+            .map((node) => ({
+                id: node.id,
+                type: node.type as NodeType,
+                position: node.position,
+                data: node.data,
+            }));
+        const edges = editor.getEdges().map((edge) => ({
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle ?? undefined,
+            targetHandle: edge.targetHandle ?? undefined,
+        }));
 
         saveWorkflow.mutate({
             id: workflowId,

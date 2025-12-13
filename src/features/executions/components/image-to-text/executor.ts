@@ -76,6 +76,9 @@ export const imageToTextExecutor: NodeExecutor<ImageToTextData> = async ({
         // Step 1: Compile image URL with Handlebars
         const imageUrl = await step.run('compile-url', async () => {
             try {
+                if (!data.imageUrl) {
+                    throw new NonRetriableError('Image to Text node: Image URL is required');
+                }
                 const cleanedUrl = cleanHandlebarsTemplate(data.imageUrl);
                 const template = Handlebars.compile(cleanedUrl);
                 let url = template(context);

@@ -41,7 +41,7 @@ export const WorkflowsList = () => {
 export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
     const createWorkflow = useCreateWorkflow();
     const router = useRouter();
-    const { handleError, modal } = useUpgradeModal();
+    const { handleError } = useUpgradeModal();
 
     const handleCreate = () => {
         createWorkflow.mutate(undefined, {
@@ -56,7 +56,6 @@ export const WorkflowsHeader = ({ disabled }: { disabled?: boolean }) => {
     }
     return (
       <>
-        {modal}
         <EntityHeader 
             title="Workflows"
             description="Create and manage your workflows"
@@ -106,7 +105,7 @@ export const WorkflowsError = () => {
 
 export const WorkflowsEmpty = () => {
     const createWorkflow = useCreateWorkflow();
-    const { handleError, modal } = useUpgradeModal();
+    const { handleError } = useUpgradeModal();
 
     const handleCreate = () => {
         createWorkflow.mutate(undefined, {

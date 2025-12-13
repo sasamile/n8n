@@ -5,7 +5,7 @@ import prisma from "@/lib/db";
 import { topologicalSort } from "./utils";
 import { filterNodesByBotRouting, getSelectedBotFromContext, filterNodesBySwitchRouting } from "./routing-utils";
 import { getExecutor } from "@/features/executions/lib/executor-registry";
-import { ExecutionStatus, NodeType } from "@/generated/prisma";
+import { ExecutionStatus, NodeType, Node, Connection } from "@/generated/prisma";
 import { httpRequestChannel } from "./channels/http-request";
 import { manualTriggerChannel } from "./channels/manual-trigger";
 import { googleFormTriggerChannel } from "./channels/google-form-trigger";
@@ -142,20 +142,20 @@ export const executeWorkflow = inngest.createFunction(
         step,
         publish,
         workflow: {
-          nodes: workflow.nodes,
-          connections: workflow.connections,
+          nodes: workflow.nodes as unknown as Node[],
+          connections: workflow.connections as unknown as Connection[],
         },
       });
 
       // Handle Bot Router: filter nodes based on selected bot
       if (node.type === NodeType.BOT_ROUTER) {
-        const selectedBot = getSelectedBotFromContext(node.data, context);
+        const selectedBot = getSelectedBotFromContext(node.data as Record<string, unknown>, context);
         if (selectedBot) {
           filterNodesByBotRouting(
             node.id,
             selectedBot,
-            sortedNodes,
-            workflow.connections,
+            sortedNodes as unknown as Node[],
+            workflow.connections as unknown as Connection[],
             nodesToExecute
           );
         }
@@ -163,16 +163,20 @@ export const executeWorkflow = inngest.createFunction(
 
       // Handle Switch: filter nodes based on condition result
       if (node.type === NodeType.SWITCH) {
-        const switchResult = context[node.data?.variableName as string] as { result?: number } | undefined;
-        if (switchResult?.result !== undefined) {
-          // result is now the matched case index (-1 for default case)
-          filterNodesBySwitchRouting(
-            node.id,
-            switchResult.result,
-            sortedNodes,
-            workflow.connections,
-            nodesToExecute
-          );
+        const nodeData = node.data as Record<string, unknown>;
+        const variableName = nodeData?.variableName as string | undefined;
+        if (variableName) {
+          const switchResult = context[variableName] as { result?: number } | undefined;
+          if (switchResult?.result !== undefined) {
+            // result is now the matched case index (-1 for default case)
+            filterNodesBySwitchRouting(
+              node.id,
+              switchResult.result,
+              sortedNodes as unknown as Node[],
+              workflow.connections as unknown as Connection[],
+              nodesToExecute
+            );
+          }
         }
       }
     };

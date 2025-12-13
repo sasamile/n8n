@@ -195,8 +195,8 @@ export const topologicalSort = (
     // Also filter isolated nodes - if they are tool nodes, exclude them
     const isolatedNodeObjects = isolatedNodes
         .map((id) => nodeMap.get(id))
-        .filter(Boolean)
-        .filter(node => !toolNodeIds.has(node.id)) as Node[];
+        .filter((node): node is Node => node !== undefined)
+        .filter(node => !toolNodeIds.has(node.id));
     
     const excludedToolNodes = sortedNodes.filter(node => toolNodeIds.has(node.id));
     console.log(`[TopologicalSort] Excluded ${excludedToolNodes.length} tool node(s) from normal flow:`, excludedToolNodes.map(n => n.name || n.id));
