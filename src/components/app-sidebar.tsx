@@ -62,7 +62,9 @@ export const AppSidebar = () => {
                     >
                         <Link href='/workflows' prefetch>
                         <Image src={'/logo.jpg'} width={30} height={30} alt={'Zyntek.SAS1 - AI Agentic Workflow Engine'}/>
-                        <span className='font-semibold text-sm'>Zyntek.SAS</span>
+                        <span className='font-semibold text-sm tracking-tight'>
+                          Zyntek<span className='text-primary'>.SAS</span>
+                        </span>
                         </Link>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
