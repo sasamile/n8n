@@ -1,9 +1,14 @@
 procs:
   # ngrok:
-  #   cmd: ['npm', 'run', 'ngrok:dev']
+  #   cmd: ['bun', 'run', 'ngrok:dev']
 
   inngest:
-    cmd: ["npm", "run", "inngest:dev"]
+    cmd:
+      - "C:/Users/Usuario/Documents/n8n/node_modules/inngest-cli/bin/inngest.exe"
+      - "dev"
 
   next:
-    cmd: ["npm", "run", "dev"]
+    cmd:
+      - "C:/Program Files/nodejs/npm.cmd"
+      - "run"
+      - "dev"

@@ -9,8 +9,8 @@
     "lint": "biome check",
     "ngrok:dev": "ngrok http --url=unrevoked-stoloniferous-rickey.ngrok-free.dev 3000",
     "format": "biome format --write",
-    "inngest:dev": "inngest-cli dev",
-    "dev:all": "dotenv -- mprocs"
+    "inngest:dev": "node_modules/inngest-cli/bin/inngest.exe dev",
+    "dev:all": "dotenv -- mprocs -c mprocs.yaml"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.31",
